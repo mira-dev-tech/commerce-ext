@@ -184,6 +184,25 @@ Hook ou evento usado mas não declarado ⇒ falha na verificação
 go get github.com/mira-dev-tech/commerce-ext@v0.2.0
 ```
 
+## Do plugin à produção — em resumo
+
+O que você testa **sozinho, na sua máquina**: unidade dos handlers, o
+handshake do binário go-plugin e a paridade `Register` ↔ manifest. O que roda
+**em ambiente Mirá**: integração com o Extension Host real (cadeia de
+prioridades, timeout, eventos) e o aceite num checkout de verdade.
+
+Caminhos para produção:
+
+- **Dev interno (in-process)**: plugin entra no monorepo do core via PR, atrás
+  de flag, e sobe no deploy normal da API.
+- **Parceiro (go-plugin externo)**: entrega **código-fonte versionado** (nunca
+  binário opaco — a Mirá audita e builda), validação em dev/staging, e em
+  produção o manifest entra pinado por versão. Kill switch: remover o manifest
+  do deploy + restart devolve o comportamento baseline.
+
+O passo a passo completo, com a tabela de "o que roda onde", está no README do
+template [`mira-commerce-plugin-example`](https://github.com/mira-dev-tech/mira-commerce-plugin-example#testando-o-seu-plugin--o-que-roda-onde).
+
 ## Governança deste repositório
 
 - A **fonte de verdade** do protocolo vive no monorepo interno do core
