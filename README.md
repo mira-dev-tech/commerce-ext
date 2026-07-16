@@ -184,12 +184,37 @@ Hook ou evento usado mas não declarado ⇒ falha na verificação
 go get github.com/mira-dev-tech/commerce-ext@v0.2.0
 ```
 
+## Teste de integração local — `plugintest`
+
+O subpacote [`plugintest`](plugintest/) é um **mini Extension Host em memória**
+para você testar integração sem acesso ao core. Ele reproduz as semânticas que
+importam: cadeia por prioridade entre plugins, timeout de 300ms + panic-safe
+(→ `PLUGIN_FAILURE`), acumulação/override do `checkout.quote_adjust`, pipeline
+de `integration.transform_*`, e `PublishAtLeastOnce` — que entrega o mesmo
+fato duas vezes com IDs distintos para provar que seu handler é idempotente
+pela chave de negócio.
+
+```go
+import "github.com/mira-dev-tech/commerce-ext/plugintest"
+
+host := plugintest.NewHost()
+_ = host.Install(ctx, meuplugin.New(), plugintest.WithConfig(map[string]any{"min_subtotal": 300}))
+
+out := host.QuoteAdjust(ctx, commerceext.QuoteAdjustInput{Subtotal: 500})
+// out.Discount == 25, out.TotalAmount == 475
+
+errs := host.PublishAtLeastOnce(ctx, commerceext.Event{
+    Type: commerceext.EventOrderConfirmed,
+    Data: map[string]any{"order_id": "o1", "total_amount": 500.0},
+})
+```
+
 ## Do plugin à produção — em resumo
 
-O que você testa **sozinho, na sua máquina**: unidade dos handlers, o
-handshake do binário go-plugin e a paridade `Register` ↔ manifest. O que roda
-**em ambiente Mirá**: integração com o Extension Host real (cadeia de
-prioridades, timeout, eventos) e o aceite num checkout de verdade.
+O que você testa **sozinho, na sua máquina**: unidade dos handlers, integração
+com o mini-host `plugintest`, o handshake do binário go-plugin e a paridade
+`Register` ↔ manifest. O que roda **em ambiente Mirá**: o host real com dados
+reais (workflow, outbox durável) e o aceite num checkout de verdade.
 
 Caminhos para produção:
 
