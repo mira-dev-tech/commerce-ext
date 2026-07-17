@@ -240,6 +240,56 @@ func (h *Host) WmsMovementValidate(ctx context.Context, in commerceext.WmsMoveme
 	return runOutcomeChain(h, ctx, commerceext.HookWmsMovementValidate, in)
 }
 
+// PaymentRoute roda payment.route com a semântica do core: deny para a cadeia
+// (código default payment_blocked); Require3DS acumula em OR entre plugins.
+func (h *Host) PaymentRoute(ctx context.Context, in commerceext.PaymentRouteInput) commerceext.PaymentRouteDecision {
+	decision := commerceext.PaymentRouteDecision{Outcome: commerceext.Allowed()}
+	for _, e := range h.hooks[commerceext.HookPaymentRoute] {
+		fn, ok := e.fn.(func(context.Context, commerceext.PaymentRouteInput) commerceext.PaymentRouteDecision)
+		if !ok {
+			continue
+		}
+		var out commerceext.PaymentRouteDecision
+		if !h.runSafe(ctx, func(c context.Context) { out = fn(c, in) }) {
+			return commerceext.PaymentRouteDecision{Outcome: failure(commerceext.HookPaymentRoute)}
+		}
+		if !out.Allow {
+			if out.Code == "" {
+				out.Code = "payment_blocked"
+			}
+			return out
+		}
+		if out.Require3DS {
+			decision.Require3DS = true
+		}
+	}
+	return decision
+}
+
+// ShippingQuote roda shipping.quote com a semântica do core: cada handler
+// recebe o INPUT ORIGINAL; devolver Options não-vazias substitui o conjunto
+// corrente (o último que ajusta vence); deny bloqueia a cotação.
+func (h *Host) ShippingQuote(ctx context.Context, in commerceext.ShippingQuoteInput) commerceext.ShippingQuoteResult {
+	result := commerceext.ShippingQuoteResult{Options: in.Options, Outcome: commerceext.Allowed()}
+	for _, e := range h.hooks[commerceext.HookShippingQuote] {
+		fn, ok := e.fn.(func(context.Context, commerceext.ShippingQuoteInput) commerceext.ShippingQuoteResult)
+		if !ok {
+			continue
+		}
+		var out commerceext.ShippingQuoteResult
+		if !h.runSafe(ctx, func(c context.Context) { out = fn(c, in) }) {
+			return commerceext.ShippingQuoteResult{Outcome: failure(commerceext.HookShippingQuote)}
+		}
+		if !out.Allow {
+			return out
+		}
+		if len(out.Options) > 0 {
+			result.Options = out.Options
+		}
+	}
+	return result
+}
+
 // QuoteAdjust roda checkout.quote_adjust com a semântica de cadeia do core:
 // Discount acumula; TotalAmount > 0 sobrescreve; deny bloqueia.
 func (h *Host) QuoteAdjust(ctx context.Context, in commerceext.QuoteAdjustInput) commerceext.QuoteAdjustResult {
