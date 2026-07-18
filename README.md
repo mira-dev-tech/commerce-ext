@@ -246,3 +246,16 @@ template [`mira-commerce-plugin-example`](https://github.com/mira-dev-tech/mira-
 | Handler de evento não-idempotente | Dedupe pela chave de negócio, persistido |
 | Renomear código de bloqueio publicado | Código estável — é contrato |
 | Logar valores de `Secrets` | Nunca |
+
+## Ecossistema Mirá Commerce
+
+📚 **Documentação pública: [docs.mira-dev.tech](https://docs.mira-dev.tech)**
+
+| Repo | O que é |
+|---|---|
+| [mira-commerce-sdk-js](https://github.com/mira-dev-tech/mira-commerce-sdk-js) | SDKs oficiais JS/TS — `client-sdk` (API tipada) e `checkout-sdk` (checkout headless) |
+| [mira-commerce-storefront-guide](https://github.com/mira-dev-tech/mira-commerce-storefront-guide) | Guia oficial para construir um storefront (vitrine + checkout) sobre as APIs |
+| [commerce-ext](https://github.com/mira-dev-tech/commerce-ext) | SDK público de plugins — Extension Protocol |
+| [mira-commerce-plugin-example](https://github.com/mira-dev-tech/mira-commerce-plugin-example) | Template de plugin — exemplo didático (hooks, eventos, manifest, go-plugin) |
+| [mira-commerce-plugin-payment](https://github.com/mira-dev-tech/mira-commerce-plugin-payment) | Template de plugin de pagamento e antifraude (roteamento, 3DS, velocity) |
+| [mira-commerce-plugin-shipping](https://github.com/mira-dev-tech/mira-commerce-plugin-shipping) | Template de plugin de logística/frete (cotação externa, cache, circuit breaker) |
