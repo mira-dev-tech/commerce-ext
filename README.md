@@ -174,11 +174,37 @@ Hook ou evento usado mas não declarado ⇒ falha na verificação
    - `./plugin --commerce-ext-handshake` → imprime `commerce-ext-ok` (probe)
    - `./plugin --commerce-ext-rpc 127.0.0.1:PORTA` → serve net/rpc até ser morto
 
-## Versionamento
+## Versionamento e compatibilidade — o que acontece quando o core muda
 
-- A linha do protocolo é `CoreLine` ([`version.go`](version.go)); as tags deste
-  repo acompanham (`v0.2.0` ↔ core API v0.2).
-- `compatibleCore` do seu manifest usa semver (`^0.2.0` aceita toda a linha 0.2).
+Três versões distintas (não confundir):
+
+| Versão | Onde | Significado |
+|--------|------|-------------|
+| Imagem / tag do **core** (`vX.Y.Z`) | Deploy do cliente (pin) | Binário em produção — upgrade **opt-in** |
+| `CoreLine` ([`version.go`](version.go)) | Este SDK | Linha do **protocolo** (hooks, eventos, tipos) |
+| `version` + `compatibleCore` | `manifest.yaml` do plugin | Semver do artefacto + range aceite |
+
+**Plugins em produção não acompanham o `main` do core.** Continuam válidos no
+pin da imagem enquanto `compatibleCore` casar com o `CoreLine` desse binário.
+Outros tenants / a shared API **não** são forçados a migrar por causa do seu
+plugin.
+
+| Mudança no core / neste SDK | O seu plugin | O que fazer |
+|-----------------------------|--------------|-------------|
+| Aditiva (hook novo, campo opcional, refactor interno) | Continua | Nada obrigatório |
+| Patch CVE na mesma linha LTS do core | Continua | Cliente só bumpa o pin se quiser o patch |
+| **Breaking** (hook removido/renomeado, deny code, campo obrigatório) | Fora do range após major de `CoreLine` | Recompilar contra a nova tag; bump `compatibleCore` + `version` do plugin |
+
+- Tags deste repo acompanham a linha (`v0.2.0` ↔ core API / `CoreLine` 0.2).
+- `compatibleCore: "^0.2.0"` — o matcher actual compara o **major** com
+  `CoreLine`. Por isso breaking sobe `0.2 → 1.0` (nunca `0.2 → 0.3`), com ADR
+  + Release notes (*Compatibility*) + issues nos templates.
+- Notificação: GitHub Release deste repo + issues em
+  `mira-commerce-plugin-*`. Clientes em LTS antiga só são avisados por CVE da
+  linha ou fim de suporte — nunca «migre porque o main avançou».
+
+SSOT no monorepo (após merge): contrato de compatibilidade +
+[ADR 0048](https://github.com/mira-dev-tech/mira-commerce-core/blob/main/docs/adr/0048-extension-compatibility-versioning.md).
 
 ```bash
 go get github.com/mira-dev-tech/commerce-ext@v0.2.0
@@ -246,6 +272,8 @@ template [`mira-commerce-plugin-example`](https://github.com/mira-dev-tech/mira-
 | Handler de evento não-idempotente | Dedupe pela chave de negócio, persistido |
 | Renomear código de bloqueio publicado | Código estável — é contrato |
 | Logar valores de `Secrets` | Nunca |
+| Breaking silencioso no protocolo | Major de `CoreLine` + Release *Compatibility* |
+| Assumir que o plugin «acompanha» o core | Só actualiza no bump de pin / major do protocolo |
 
 ## Ecossistema Mirá Commerce
 
