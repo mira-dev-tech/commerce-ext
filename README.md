@@ -234,7 +234,7 @@ Publicar é pelo GitHub, não por um painel:
 
 1. PR no repo do plugin, com `go test ./...` e o handshake verdes.
 2. Tag `vX.Y.Z` nesse commit. Não se envia binário.
-3. O workflow da Mirá clona esse SHA, constrói a imagem e grava a release com o digest que ele calculou. A primeira versão de um id novo espera review. A sessão de parceiro não grava release.
+3. O workflow da plataforma clona esse SHA, constrói a imagem e grava a release com o digest que ele calculou. O `partner_id` tem de estar ativo no registo dinâmico do Console. Um id de outro parceiro é recusado na gravação. A sessão de parceiro não grava release.
 4. Ligar a uma empresa é outro disparo. O pin nasce `installing` e só fica `active` quando o role `ext_<id>` respeita a RLS.
 
 As regras e a razão de cada uma estão no [`AGENTS.md`](AGENTS.md). O template comentado é o [`aranduOS-plugin-example`](https://github.com/aranduOS/aranduOS-plugin-example).
