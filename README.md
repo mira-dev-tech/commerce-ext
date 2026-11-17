@@ -177,11 +177,16 @@ Quem cobra é o host. O plugin diz o medidor, as vezes e a chave de negócio. N�
 
 ## Compatibility
 
-`v0.2.3` é aditivo na linha `0.2.0`. O `CoreLine` não mudou, e um manifest
-com `compatibleCore: ^0.2.0` continua a casar. Entra nesta tag o que a
-ADR 0334 já exige do processo de parceiro: `Usage.Add` (medidor, vezes e
-chave de negócio; o preço fica no host), o cliente do host, o prefixo de
-schema `ext_` e a guarda de SQL. Não há tipo removido nem hook renomeado.
+`v0.2.3` acrescenta, na linha `0.2.0`, o que a ADR 0334 exige do processo
+de parceiro: `Usage.Add` (medidor, vezes e chave de negócio; o preço fica
+no host), o cliente do host, o prefixo de schema `ext_` e a guarda de SQL.
+O `CoreLine` não mudou, e um manifest com `compatibleCore: ^0.2.0` continua
+a casar. Não há hook renomeado.
+
+Os valores de pedido e de cotação (`OrderView.TotalAmount`,
+`QuoteAdjustInput.Subtotal`, `QuoteAdjustResult.TotalAmount` e `Discount`)
+passam a `float64`. Um plugin que os guardava em `float32` recompila; o
+JSON não muda.
 
 ## Versionamento
 
@@ -190,7 +195,7 @@ schema `ext_` e a guarda de SQL. Não há tipo removido nem hook renomeado.
 - `compatibleCore` do seu manifest usa semver (`^0.2.0` aceita toda a linha 0.2).
 
 ```bash
-go get github.com/mira-dev-tech/commerce-ext@v0.2.3
+go get github.com/mira-dev-tech/commerce-ext@v0.2.4
 ```
 
 ## Teste de integração local — `plugintest`
