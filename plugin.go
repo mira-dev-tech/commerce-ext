@@ -10,7 +10,9 @@ type Meta struct {
 	Description    string
 }
 
-// Plugin is implemented by in-process (2b) or go-plugin (future) extensions.
+// Plugin is implemented by a partner process (commerceext.Serve) or by an
+// in-process plugin maintained inside the core. Partner code does not link
+// the core and is not started by the API.
 type Plugin interface {
 	Meta() Meta
 	Init(ctx context.Context, rt *Runtime) error
