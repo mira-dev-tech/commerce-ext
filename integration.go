@@ -55,7 +55,7 @@ type OrderOutboundView struct {
 	ID        string
 	TenantID  string
 	Status    string
-	Total     float32
+	Total     float64
 	LineItems []OrderLineView
 }
 
@@ -63,7 +63,7 @@ type OrderOutboundView struct {
 type OrderLineView struct {
 	SKU       string
 	Quantity  int
-	UnitPrice float32
+	UnitPrice float64
 }
 
 // OrderStatusUpdate is pushed to ERP on status change.

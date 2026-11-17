@@ -11,9 +11,24 @@ type OrderView struct {
 	ID           string         `json:"id"`
 	TenantID     string         `json:"tenant_id"`
 	Status       string         `json:"status"`
-	TotalAmount  float32        `json:"total_amount"`
+	TotalAmount  float64        `json:"total_amount"`
 	CustomerName string         `json:"customer_name"`
 	Metadata     map[string]any `json:"metadata"`
+	// CustomerID e Items existem desde a ADR 0227 D9. Sem eles nenhum hook
+	// decidia sobre o CONTEÚDO de um pedido — só sobre o total e o nome —, e
+	// era esse buraco que empurrava a regra de uma vertical para dentro do
+	// core (#2867). Vazio num pedido anónimo ou sem linhas.
+	CustomerID string          `json:"customer_id,omitempty"`
+	Items      []OrderItemView `json:"items,omitempty"`
+}
+
+// OrderItemView é uma linha do pedido como o hook a vê. Magra de propósito:
+// preço não entra porque um hook que decida sobre dinheiro tem de o pedir ao
+// core (`catalog.price_resolve`), não reler o que o pedido já gravou.
+type OrderItemView struct {
+	SKU      string `json:"sku"`
+	ItemType string `json:"item_type"`
+	Quantity int    `json:"quantity"`
 }
 
 // CheckoutValidateInput is passed to checkout.validate handlers.
@@ -41,6 +56,41 @@ type PaymentRouteInput struct {
 type PaymentRouteDecision struct {
 	Outcome
 	Require3DS bool
+}
+
+// PaymentInstallmentOption is one installment plan for payment.installment_resolve.
+//
+// Optional money fields stay pointers (nil ≠ zero: "no interest quoted" is not
+// "0% quoted"); optional strings/enums flatten to "" like the other mirrors.
+type PaymentInstallmentOption struct {
+	Installments        int
+	InstallmentValue    float32
+	Total               float32
+	WithoutInterest     bool
+	InterestRateMonthly *float32
+	InterestTotal       *float32
+	ExtraPerInstallment *float32
+	Label               string
+	Provider            string
+}
+
+// PaymentInstallmentInput is passed to payment.installment_resolve handlers.
+// Request carries the resolve payload (amount, card_brand, bin_prefix, cart…)
+// as decoded JSON; Options are the plans core resolved before the chain ran.
+type PaymentInstallmentInput struct {
+	Request  map[string]any
+	MemberID string
+	Options  []PaymentInstallmentOption
+	Provider string
+	RuleID   string
+}
+
+// PaymentInstallmentResult may replace installment options/provider or block.
+// Returning Options empty keeps the core-resolved plans.
+type PaymentInstallmentResult struct {
+	Options  []PaymentInstallmentOption
+	Provider string
+	Outcome
 }
 
 // PriceResolveInput is passed to catalog.price_resolve handlers.
@@ -89,22 +139,22 @@ type IntegrationTransformResult struct {
 type QuoteAdjustLine struct {
 	SKU        string
 	Quantity   int
-	UnitPrice  float32
-	TotalPrice float32
+	UnitPrice  float64
+	TotalPrice float64
 }
 
 // QuoteAdjustInput is passed to checkout.quote_adjust handlers.
 type QuoteAdjustInput struct {
 	TenantID    string
 	WarehouseID string
-	Subtotal    float32
+	Subtotal    float64
 	Items       []QuoteAdjustLine
 }
 
 // QuoteAdjustResult may adjust totals before order persist.
 type QuoteAdjustResult struct {
-	TotalAmount float32
-	Discount    float32
+	TotalAmount float64
+	Discount    float64
 	Outcome
 }
 
@@ -117,17 +167,31 @@ type MemberEligibilityInput struct {
 
 // ShippingQuoteLine is a preliminary shipping option for shipping.quote.
 type ShippingQuoteLine struct {
-	MethodID      string
-	CarrierCode   string
-	CarrierName   string
-	MethodCode    string
-	MethodName    string
-	TransportMode string
-	Price         float32
-	Currency      string
-	EtaDaysMin    *int
-	EtaDaysMax    *int
-	Provider      string
+	MethodID       string
+	CarrierCode    string
+	CarrierName    string
+	MethodCode     string
+	MethodName     string
+	TransportMode  string
+	BasePrice      float32
+	Price          float32
+	Currency       string
+	EtaDaysMin     *int
+	EtaDaysMax     *int
+	Provider       string
+	ProviderID     string
+	SourcePluginID string
+	Breakdown      *ShippingPriceBreakdown
+}
+
+// ShippingPriceBreakdown describes the core adjustment applied before plugins.
+type ShippingPriceBreakdown struct {
+	BasePrice         float32
+	AdjustmentPercent float32
+	AdjustmentFixed   float32
+	AdjustmentAmount  float32
+	AdjustmentLabel   string
+	FinalPrice        float32
 }
 
 // ShippingQuoteInput is passed to shipping.quote handlers.

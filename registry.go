@@ -19,6 +19,22 @@ type HookRegistration = hookRegistration
 // EventRegistration describes a registered event handler.
 type EventRegistration = eventRegistration
 
+type customerActionRegistration struct {
+	Action string
+	Method string
+	Fn     CustomerActionFunc
+}
+
+// CustomerActionRegistration is one buyer-session handler.
+type CustomerActionRegistration = customerActionRegistration
+
+// StaffActionRegistration é um handler da porta da equipe (ADR 0317 D2).
+type StaffActionRegistration struct {
+	Action string
+	Method string
+	Fn     StaffActionFunc
+}
+
 // Registry collects hook, event and integration-adapter registrations from a plugin.
 type Registry struct {
 	pluginID            string
@@ -26,6 +42,9 @@ type Registry struct {
 	events              []eventRegistration
 	adapters            []IntegrationAdapter
 	marketplaceAdapters []MarketplaceAdapter
+	customerActions     []customerActionRegistration
+	staffRecords        StaffRecordFunc
+	staffActions        []StaffActionRegistration
 }
 
 // NewRegistry creates a registry scoped to pluginID.
@@ -114,6 +133,11 @@ func (r *Registry) OnPaymentRoute(priority int, fn func(context.Context, Payment
 	r.register(HookPaymentRoute, priority, fn)
 }
 
+// OnPaymentInstallmentResolve registers payment.installment_resolve.
+func (r *Registry) OnPaymentInstallmentResolve(priority int, fn func(context.Context, PaymentInstallmentInput) PaymentInstallmentResult) {
+	r.register(HookPaymentInstallmentResolve, priority, fn)
+}
+
 // OnCatalogPriceResolve registers catalog.price_resolve.
 func (r *Registry) OnCatalogPriceResolve(priority int, fn func(context.Context, PriceResolveInput) PriceResolveResult) {
 	r.register(HookCatalogPriceResolve, priority, fn)
@@ -172,6 +196,63 @@ func (r *Registry) OnShippingQuote(priority int, fn func(context.Context, Shippi
 // OnTaxResolve registers tax.resolve.
 func (r *Registry) OnTaxResolve(priority int, fn func(context.Context, TaxResolveInput) TaxResolveResult) {
 	r.register(HookTaxResolve, priority, fn)
+}
+
+// OnCustomerAction regista o tratamento de uma acção da sessão da compradora.
+// method é um verbo HTTP (GET, POST, PUT, PATCH, DELETE). A mesma acção pode
+// ter um handler por verbo. O manifesto tem de declarar o par — o host recusa
+// chamar o que não está na lista.
+func (r *Registry) OnCustomerAction(action, method string, fn CustomerActionFunc) {
+	if r == nil || fn == nil {
+		return
+	}
+	r.customerActions = append(r.customerActions, customerActionRegistration{
+		Action: action,
+		Method: method,
+		Fn:     fn,
+	})
+}
+
+// OnStaffRecords regista a porta única por onde a equipe lista, lê e grava
+// os documentos desta extensão (ADR 0294).
+func (r *Registry) OnStaffRecords(fn StaffRecordFunc) {
+	if r == nil || fn == nil {
+		return
+	}
+	r.staffRecords = fn
+}
+
+// OnStaffAction regista o handler de uma acção da equipe para um verbo. O
+// manifesto tem de declarar o par em `staff_api`.
+func (r *Registry) OnStaffAction(action, method string, fn StaffActionFunc) {
+	if r == nil || fn == nil {
+		return
+	}
+	r.staffActions = append(r.staffActions, StaffActionRegistration{Action: action, Method: method, Fn: fn})
+}
+
+// StaffActions devolve os handlers da equipe registados.
+func (r *Registry) StaffActions() []StaffActionRegistration {
+	if r == nil {
+		return nil
+	}
+	return append([]StaffActionRegistration(nil), r.staffActions...)
+}
+
+// StaffRecords devolve o handler da equipe, se o plugin o registou.
+func (r *Registry) StaffRecords() StaffRecordFunc {
+	if r == nil {
+		return nil
+	}
+	return r.staffRecords
+}
+
+// CustomerActions devolve os handlers de comprador registados.
+func (r *Registry) CustomerActions() []CustomerActionRegistration {
+	if r == nil {
+		return nil
+	}
+	return append([]CustomerActionRegistration(nil), r.customerActions...)
 }
 
 // OnEvent registers an async event handler (idempotent required).
