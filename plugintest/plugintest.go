@@ -12,6 +12,10 @@
 //   - Eventos: entrega síncrona em ordem de inscrição; PublishAtLeastOnce
 //     entrega o MESMO fato duas vezes (IDs distintos) para provar idempotência
 //     pela chave de negócio.
+//   - PluginDB em memória (NewDB + Migrate) com a mesma guarda de SQL do host
+//     (commerceext.GuardStatement) e o tenant injectado (ADR 0334 D2).
+//   - Wallet falsa (NewWallet): o medidor debita o preço aceite, recusa sem
+//     saldo e não cobra a mesma chave de negócio duas vezes.
 //
 // Uso típico:
 //
@@ -64,6 +68,8 @@ type installOpts struct {
 	config  map[string]any
 	secrets map[string]string
 	logger  commerceext.Logger
+	db      commerceext.PluginDB
+	usage   commerceext.Usage
 }
 
 // WithConfig injeta Runtime.Config no Init do plugin.
@@ -79,6 +85,16 @@ func WithSecrets(s map[string]string) Option {
 // WithLogger injeta o logger do Runtime (padrão: NopLogger).
 func WithLogger(l commerceext.Logger) Option {
 	return func(o *installOpts) { o.logger = l }
+}
+
+// WithDB injeta Runtime.DB. Sem isto, Database() devolve ErrNotProvisioned.
+func WithDB(db commerceext.PluginDB) Option {
+	return func(o *installOpts) { o.db = db }
+}
+
+// WithUsage injeta o medidor. Sem isto, Meters() devolve ErrUsageUnavailable.
+func WithUsage(u commerceext.Usage) Option {
+	return func(o *installOpts) { o.usage = u }
 }
 
 // NewHost cria um host de teste vazio.
@@ -122,6 +138,8 @@ func (h *Host) Install(ctx context.Context, p commerceext.Plugin, opts ...Option
 		Secrets: o.secrets,
 		Logger:  o.logger,
 		Events:  hostPublisher{h: h},
+		DB:      o.db,
+		Usage:   o.usage,
 	}
 	if rt.Config == nil {
 		rt.Config = map[string]any{}
@@ -264,6 +282,35 @@ func (h *Host) PaymentRoute(ctx context.Context, in commerceext.PaymentRouteInpu
 		}
 	}
 	return decision
+}
+
+// PaymentInstallmentResolve roda payment.installment_resolve com a semântica do
+// core: cada handler recebe o INPUT ORIGINAL (não o resultado do anterior);
+// devolver Options não-vazias substitui o conjunto corrente e Provider
+// não-vazio substitui o provedor (o último que ajusta vence); deny bloqueia o
+// parcelamento — no core vira ErrInstallmentsDisabled, não uma lista vazia.
+func (h *Host) PaymentInstallmentResolve(ctx context.Context, in commerceext.PaymentInstallmentInput) commerceext.PaymentInstallmentResult {
+	result := commerceext.PaymentInstallmentResult{Options: in.Options, Provider: in.Provider, Outcome: commerceext.Allowed()}
+	for _, e := range h.hooks[commerceext.HookPaymentInstallmentResolve] {
+		fn, ok := e.fn.(func(context.Context, commerceext.PaymentInstallmentInput) commerceext.PaymentInstallmentResult)
+		if !ok {
+			continue
+		}
+		var out commerceext.PaymentInstallmentResult
+		if !h.runSafe(ctx, func(c context.Context) { out = fn(c, in) }) {
+			return commerceext.PaymentInstallmentResult{Outcome: failure(commerceext.HookPaymentInstallmentResolve)}
+		}
+		if !out.Allow {
+			return out
+		}
+		if len(out.Options) > 0 {
+			result.Options = out.Options
+		}
+		if out.Provider != "" {
+			result.Provider = out.Provider
+		}
+	}
+	return result
 }
 
 // ShippingQuote roda shipping.quote com a semântica do core: cada handler

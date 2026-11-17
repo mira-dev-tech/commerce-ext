@@ -47,7 +47,15 @@ func Serve(p Plugin) {
 // process on shutdown).
 func serveRPC(p Plugin, addr string) error {
 	ctx := context.Background()
-	if err := p.Init(ctx, &Runtime{Logger: NopLogger{}}); err != nil {
+	rt := &Runtime{Logger: NopLogger{}}
+	if addr := os.Getenv(EnvHost); addr != "" {
+		usage, err := DialUsage(addr)
+		if err != nil {
+			return fmt.Errorf("host usage: %w", err)
+		}
+		rt.Usage = usage
+	}
+	if err := p.Init(ctx, rt); err != nil {
 		return fmt.Errorf("plugin init: %w", err)
 	}
 	reg := NewRegistry(p.Meta().ID)
@@ -101,7 +109,7 @@ func (s *rpcService) Call(args RPCCallArgs, reply *RPCCallReply) error {
 		if h.HookID != args.HookID {
 			continue
 		}
-		return dispatchHook(h, args.Input, reply)
+		return dispatchHook(h, args.CallID, args.Input, reply)
 	}
 	return fmt.Errorf("no handler for hook %q", args.HookID)
 }
@@ -112,8 +120,8 @@ func (s *rpcService) Call(args RPCCallArgs, reply *RPCCallReply) error {
 // RPC adapters in internal/ext/goplugin).
 //
 //nolint:cyclop // one case per hook type — exhaustive by design.
-func dispatchHook(h HookRegistration, input []byte, reply *RPCCallReply) error {
-	ctx := context.Background()
+func dispatchHook(h HookRegistration, callID string, input []byte, reply *RPCCallReply) error {
+	ctx := WithCall(context.Background(), callID)
 	switch fn := h.Fn.(type) {
 	// ── Outcome-only hooks ──────────────────────────────────────────────
 	case func(context.Context, CheckoutValidateInput) Outcome:
@@ -171,6 +179,8 @@ func dispatchHook(h HookRegistration, input []byte, reply *RPCCallReply) error {
 	case func(context.Context, PriceResolveInput) PriceResolveResult:
 		return resultHook(input, reply, fn)
 	case func(context.Context, QuoteAdjustInput) QuoteAdjustResult:
+		return resultHook(input, reply, fn)
+	case func(context.Context, PaymentInstallmentInput) PaymentInstallmentResult:
 		return resultHook(input, reply, fn)
 	case func(context.Context, ShippingQuoteInput) ShippingQuoteResult:
 		return resultHook(input, reply, fn)

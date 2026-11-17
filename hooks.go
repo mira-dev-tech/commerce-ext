@@ -20,6 +20,8 @@ const (
 	HookWmsMovementValidate       = "wms.movement.validate"
 	HookShippingQuote             = "shipping.quote"
 	HookTaxResolve                = "tax.resolve"
+	HookRentalQuoteAdjust         = "rental.quote_adjust"
+	HookRentalAvailability        = "rental.availability"
 )
 
 // AllHooks lists ship-first hook IDs for manifest validation.
@@ -42,4 +44,10 @@ var AllHooks = []string{
 	HookWmsMovementValidate,
 	HookShippingQuote,
 	HookTaxResolve,
+	// HookRentalQuoteAdjust e HookRentalAvailability estão FORA desta lista de
+	// propósito: os IDs existem e estão reservados (ADR 0049), mas não há método
+	// Registry.On* nem dispatch no core — aceitá-los num manifesto seria vender
+	// um hook que nenhum plugin consegue registar (o "ghost hook" que
+	// TestAllHooksHaveRegistryMethod guarda). Entram aqui no mesmo PR que os
+	// wire, não antes.
 }

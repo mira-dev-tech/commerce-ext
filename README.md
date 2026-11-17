@@ -175,14 +175,22 @@ Plugins escritos pela Mirá continuam in-process, no monorepo interno. Esse cami
 
 Quem cobra é o host. O plugin diz o medidor, as vezes e a chave de negócio. Não manda o preço. Sem saldo o hook não corre.
 
+## Compatibility
+
+`v0.2.3` é aditivo na linha `0.2.0`. O `CoreLine` não mudou, e um manifest
+com `compatibleCore: ^0.2.0` continua a casar. Entra nesta tag o que a
+ADR 0334 já exige do processo de parceiro: `Usage.Add` (medidor, vezes e
+chave de negócio; o preço fica no host), o cliente do host, o prefixo de
+schema `ext_` e a guarda de SQL. Não há tipo removido nem hook renomeado.
+
 ## Versionamento
 
 - A linha do protocolo é `CoreLine` ([`version.go`](version.go)); as tags deste
-  repo acompanham (`v0.2.0` ↔ core API v0.2).
+  repo acompanham (`v0.2.x` ↔ core API v0.2).
 - `compatibleCore` do seu manifest usa semver (`^0.2.0` aceita toda a linha 0.2).
 
 ```bash
-go get github.com/mira-dev-tech/commerce-ext@v0.2.0
+go get github.com/mira-dev-tech/commerce-ext@v0.2.3
 ```
 
 ## Teste de integração local — `plugintest`

@@ -14,8 +14,8 @@ import (
 type fakePlugin struct {
 	id        string
 	prio      int
-	cap       float32
-	discount  float32
+	cap       float64
+	discount  float64
 	processed map[string]struct{}
 	points    int
 	panics    bool
@@ -150,9 +150,9 @@ func TestEventTypeFiltering(t *testing.T) {
 type routePlugin struct {
 	id      string
 	prio    int
-	teto3ds float32
+	teto3ds float64
 	blocked string
-	freeGte float32
+	freeGte float64
 }
 
 func (p *routePlugin) Meta() commerceext.Meta {
@@ -227,5 +227,126 @@ func TestShippingQuoteLastAdjusterWins(t *testing.T) {
 	}
 	if in.Options[0].Price != 39.9 {
 		t.Fatalf("input original não pode ser mutado, got %+v", in.Options[0])
+	}
+}
+
+// installmentPlugin cobre payment.installment_resolve — caminho de dinheiro:
+// corta parcelas acima de um teto, opcionalmente troca o provedor, bloqueia por
+// bandeira e/ou explode (para provar o fail-closed).
+type installmentPlugin struct {
+	id        string
+	prio      int
+	maxParc   int
+	provider  string
+	blockBran string
+	panics    bool
+}
+
+func (p *installmentPlugin) Meta() commerceext.Meta {
+	return commerceext.Meta{ID: p.id, Version: "1.0.0", CompatibleCore: "^0.2.0"}
+}
+func (p *installmentPlugin) Init(context.Context, *commerceext.Runtime) error { return nil }
+func (p *installmentPlugin) Shutdown(context.Context) error                   { return nil }
+
+func (p *installmentPlugin) Register(reg *commerceext.Registry) error {
+	reg.OnPaymentInstallmentResolve(p.prio, func(_ context.Context, in commerceext.PaymentInstallmentInput) commerceext.PaymentInstallmentResult {
+		if p.panics {
+			panic("boom")
+		}
+		if p.blockBran != "" {
+			if brand, _ := in.Request["card_brand"].(string); brand == p.blockBran {
+				return commerceext.PaymentInstallmentResult{
+					Outcome: commerceext.Denied("BRAND_OFF", "bandeira sem parcelamento"),
+				}
+			}
+		}
+		if p.maxParc <= 0 {
+			return commerceext.PaymentInstallmentResult{Provider: p.provider, Outcome: commerceext.Allowed()}
+		}
+		kept := make([]commerceext.PaymentInstallmentOption, 0, len(in.Options))
+		for _, o := range in.Options {
+			if o.Installments <= p.maxParc {
+				kept = append(kept, o)
+			}
+		}
+		return commerceext.PaymentInstallmentResult{
+			Options: kept, Provider: p.provider, Outcome: commerceext.Allowed(),
+		}
+	})
+	return nil
+}
+
+func installmentOptions() []commerceext.PaymentInstallmentOption {
+	return []commerceext.PaymentInstallmentOption{
+		{Installments: 1, InstallmentValue: 300, Total: 300, WithoutInterest: true},
+		{Installments: 6, InstallmentValue: 50, Total: 300, WithoutInterest: true},
+		{Installments: 12, InstallmentValue: 27.5, Total: 330},
+	}
+}
+
+func TestInstallmentResolveChainNarrowsOptions(t *testing.T) {
+	host := plugintest.NewHost()
+	ctx := context.Background()
+	// Dois plugins na cadeia: o de maior prioridade (menor número) corta em 12,
+	// o seguinte corta em 6 — cada um vê o INPUT ORIGINAL, o último ajuste vence.
+	_ = host.Install(ctx, &installmentPlugin{id: "a", prio: 100, maxParc: 12})
+	_ = host.Install(ctx, &installmentPlugin{id: "b", prio: 200, maxParc: 6, provider: "rules"})
+
+	in := commerceext.PaymentInstallmentInput{
+		Request: map[string]any{"amount": 300.0, "card_brand": "visa"},
+		Options: installmentOptions(),
+	}
+	out := host.PaymentInstallmentResolve(ctx, in)
+	if !out.Allow {
+		t.Fatalf("expected allow, got %+v", out)
+	}
+	if len(out.Options) != 2 {
+		t.Fatalf("expected corte em 6x (2 opções), got %d: %+v", len(out.Options), out.Options)
+	}
+	if out.Provider != "rules" {
+		t.Fatalf("expected provider sobrescrito para rules, got %q", out.Provider)
+	}
+	if len(in.Options) != 3 {
+		t.Fatalf("input original não pode ser mutado, got %d opções", len(in.Options))
+	}
+}
+
+func TestInstallmentResolveKeepsCoreOptionsWhenPluginReturnsNone(t *testing.T) {
+	host := plugintest.NewHost()
+	ctx := context.Background()
+	// Plugin que só observa (sem Options) não pode apagar o que o core resolveu.
+	_ = host.Install(ctx, &installmentPlugin{id: "a", prio: 100})
+	out := host.PaymentInstallmentResolve(ctx, commerceext.PaymentInstallmentInput{
+		Options: installmentOptions(), Provider: "internal",
+	})
+	if !out.Allow || len(out.Options) != 3 || out.Provider != "internal" {
+		t.Fatalf("expected opções/provedor do core preservados, got %+v", out)
+	}
+}
+
+func TestInstallmentResolveDenyStopsChain(t *testing.T) {
+	host := plugintest.NewHost()
+	ctx := context.Background()
+	_ = host.Install(ctx, &installmentPlugin{id: "a", prio: 100, blockBran: "amex"})
+	out := host.PaymentInstallmentResolve(ctx, commerceext.PaymentInstallmentInput{
+		Request: map[string]any{"card_brand": "amex"},
+		Options: installmentOptions(),
+	})
+	if out.Allow || out.Code != "BRAND_OFF" {
+		t.Fatalf("expected BRAND_OFF deny, got %+v", out)
+	}
+}
+
+func TestInstallmentResolvePanicIsFailClosed(t *testing.T) {
+	host := plugintest.NewHost()
+	ctx := context.Background()
+	_ = host.Install(ctx, &installmentPlugin{id: "a", prio: 100, panics: true})
+	out := host.PaymentInstallmentResolve(ctx, commerceext.PaymentInstallmentInput{Options: installmentOptions()})
+	// Fail-closed: parcelamento não pode sair de um plugin que quebrou.
+	if out.Allow || out.Code != plugintest.CodePluginFailure {
+		t.Fatalf("expected PLUGIN_FAILURE, got %+v", out)
+	}
+	if len(out.Options) != 0 {
+		t.Fatalf("falha não pode devolver opções, got %+v", out.Options)
 	}
 }
