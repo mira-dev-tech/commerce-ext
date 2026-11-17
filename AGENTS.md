@@ -65,11 +65,11 @@ que o binário fala o protocolo, não é o deploy.
 
 2. Tag `vX.Y.Z` no commit verde. Não se envia binário.
 
-3. O workflow da Mirá clona esse SHA, constrói a imagem, calcula o digest e
+3. O workflow da plataforma clona esse SHA, constrói a imagem, calcula o digest e
    grava a release (id, versão, `partner_id`, digest, `compatibleCore`, preço
-   dos medidores). A primeira versão de um `plugin_id` espera review no
-   environment do GitHub. A versão seguinte do mesmo id, do mesmo parceiro,
-   não. Regravar a mesma versão é recusado.
+   dos medidores). O `partner_id` tem de estar ativo no registo dinâmico do
+   Console. Um `plugin_id` que já pertence a outro parceiro é recusado na
+   gravação. Regravar a mesma versão é recusado.
 
 4. Ligar a uma empresa é outro disparo, com o token de parceiro e o slug.
    O pin fica `installing` até o role `ext_<id>` existir e a Mirá activar.
@@ -77,5 +77,5 @@ que o binário fala o protocolo, não é o deploy.
 5. Suspender é um disparo da Mirá. Tira a release de todas as empresas dele
    e não reinicia a API.
 
-O vínculo «esta org de GitHub é este `partner_id`» faz-se uma vez, fora do
-repo do plugin. Sem ele a tag não tem dono.
+O `partner_id` é o do registo dinâmico do Console, não um ficheiro. Sem ele
+ativo a tag não grava.
